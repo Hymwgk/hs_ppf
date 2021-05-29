@@ -15,6 +15,7 @@
                 "/home/wgk/catkin_ws/src/moveit/moveit_planners/chomp/chomp_motion_planner/include/**",
                 "/home/wgk/catkin_ws/src/geometric_shapes/include/**",
                 "/home/wgk/catkin_ws/src/hs_ppf/include/**",
+                "/home/wgk/code/hs_ppf/include/**",
                 "/home/wgk/catkin_ws/src/iai_kinect2/kinect2_bridge/include/**",
                 "/home/wgk/catkin_ws/src/iai_kinect2/kinect2_calibration/include/**",
                 "/home/wgk/catkin_ws/src/iai_kinect2/kinect2_registration/include/**",

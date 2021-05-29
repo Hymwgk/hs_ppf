@@ -1,6 +1,7 @@
 #include "offline_preparation.h"
 
-void computModelFeatureCloud(const PointCloud<PointNormal>::Ptr &modelNormalCloud,PointCloud<PPFSignature>::Ptr  &modelFeatureCloud,OfflineParamOut &pOut)
+void computModelFeatureCloud(const PointCloud<PointNormal>::Ptr &modelNormalCloud,
+		PointCloud<PPFSignature>::Ptr  &modelFeatureCloud,OfflineParamOut &pOut)
 {
 	pOut.transform_mgs.resize(modelNormalCloud->points.size());
     //改变一下模型特征点云中特征的数量,数量为|M|的给定点云，对应的modelFeatureCloud中的有效特征数量是|M|*|M|-M
@@ -9,13 +10,15 @@ void computModelFeatureCloud(const PointCloud<PointNormal>::Ptr &modelNormalClou
     modelFeatureCloud->height=1;
     modelFeatureCloud->width=static_cast<uint32_t>(modelFeatureCloud->points.size());
     modelFeatureCloud->is_dense=true;
-    PCL_INFO("本模型特征点云的有效元素数量为|M|*|M|-M =  %d \n", modelFeatureCloud->points.size()-modelNormalCloud->points.size());
+    PCL_INFO("本模型特征点云的有效元素数量为|M|*|M|-M =  %d \n", 
+			modelFeatureCloud->points.size()-modelNormalCloud->points.size());
 
-    //开始计算模型任意两点之间的连续ppf描述子以及alpha_m
+    //计算模型第一点的alpha_m以及  其与任意第二点之间的连续ppf描述子向量
 	for (size_t i = 0; i < modelNormalCloud->points.size(); ++i)
 	{
 		//===计算模型第一点旋转至与world重合，法向量也重合时候的变换矩阵
-	    Eigen::Affine3f transform_mg=pointpairToWorld(modelNormalCloud->points[i].getVector3fMap(), modelNormalCloud->points[i].getNormalVector3fMap());
+	    Eigen::Affine3f transform_mg=pointpairToWorld(modelNormalCloud->points[i].getVector3fMap(), 
+				modelNormalCloud->points[i].getNormalVector3fMap());
 		//将当前模型参考点的变换矩阵存起来
 		pOut.transform_mgs[i]=transform_mg;
 
@@ -58,9 +61,9 @@ void computModelFeatureCloud(const PointCloud<PointNormal>::Ptr &modelNormalClou
 
 void buildModelHashtable(PointCloud<PPFSignature>::ConstPtr modelFeatureCloud, DiscretParamIn &pIn, OfflineParamOut &pOut)
 {
-    pOut.feature_hash_map_=boost::make_shared<FeatureHashMapType>();
-    pOut.feature_hash_map_->clear();
-    pOut.MaxPointpairDist=-1;
+    pOut.feature_hash_map_=boost::make_shared<FeatureHashMapType>(); //构建哈希表
+    pOut.feature_hash_map_->clear();//先清空哈希表
+    pOut.MaxPointpairDist=-1;//
 	pOut.model_size=modelFeatureCloud->points.size();
 	pOut.alpha_m.resize(pOut.model_size);
 

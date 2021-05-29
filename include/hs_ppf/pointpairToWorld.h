@@ -10,8 +10,8 @@
 
 /**
  * \brief 将模型或者场景的第一点（参考点），平移到世界坐标系原点，并将其法向量旋转到与x轴平行； 返回此时的变换矩阵
- * \param [in]reference_point
- *  \param [in]reference_normal
+ * \param [in] reference_point  该参考点的坐标
+ *  \param [in] reference_normal  该参考点的表面法向量
  * \return transform_msg变换矩阵
  */
 inline Eigen::Affine3f pointpairToWorld(const Eigen::Vector3f &reference_point, const Eigen::Vector3f &reference_normal)
@@ -69,16 +69,20 @@ inline float computeAlpha_M_S(const Eigen::Vector3f	&secondPoint, const Eigen::A
  * \brief 通过计算出的alpha，来结算出模型点对转换到场景点对的变换矩阵
  * \param [in]  transform_mg  场景点转换矩阵
  * \param [in]  transform_sg 模型点转换矩阵
- * \param [in]  alpha角度
+ * \param [in]  alpha 角度
  * \return  transform 模型点对转换到场景点对的变换矩阵
  */
-inline Eigen::Affine3f modelpairToScene(const Eigen::Affine3f  &transform_mg,const Eigen::Affine3f &transform_sg, const  float &alpha)
+inline Eigen::Affine3f ModelToScene(const Eigen::Affine3f  &transform_mg,const Eigen::Affine3f &transform_sg, const  float &alpha)
 {
+	//实际就是实现inverse(Ts->g)*Rx(alpha)*Tm->g *m_i的这个公式
+	//实际上就是代表了三个步骤:
+	//第一，把模型点对转到世界坐标系，与x轴对齐；
+	//第二，把模型点对沿着x轴旋转alpha角，使与场景点对重合；
+	//第三，把模型点对对转向场景
+	//因为是相对于世界坐标系，所以，都是左乘顺序
 	Eigen::Affine3f transform =
-					transform_sg.inverse() *
-					Eigen::AngleAxisf(alpha, Eigen::Vector3f::UnitX()) *
-					transform_mg;
-	
+			transform_sg.inverse() *Eigen::AngleAxisf(alpha, Eigen::Vector3f::UnitX()) *transform_mg;
+
 	return transform;
 }
 

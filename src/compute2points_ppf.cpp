@@ -23,7 +23,6 @@ bool computeContinuousPPF(const Eigen::Vector3f &p1, const Eigen::Vector3f &n1,c
 	//计算两点长度 
 	f4 = d.norm();
 
-	
 	f1 = angleBetween(d, n1);
 	f2 = angleBetween(e, n2);
 	f3 = angleBetween(n1, n2);
