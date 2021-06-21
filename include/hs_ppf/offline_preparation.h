@@ -25,26 +25,25 @@ using namespace std;
 
 
 /**
- * \brief computModelFeatureCloud函数
- *              根据输入模型的点法云，计算了任意两点之间的ppf描述子以及该点对的alpha_m值
+ * \brief 该函数根据输入模型的点法云，计算了任意两点之间的ppf描述子以及该点对的alpha_m值
  * \param[in] modelNormalCloud 某模型的点法云指针
- * \param[out]  pOut.transform_mgs  存放模型点云每个模型参考点旋转到world坐标系的变换关系的矩阵                                          
+ * \param[out]  ModelParam.transform_mgs  存放模型点云每个模型参考点旋转到world坐标系的变换关系的矩阵                                          
  * \param[out] modelFeatureCloud 由任意点对ppf和alpha_m构成的特征点云
 */
 void computModelFeatureCloud(const PointCloud<PointNormal>::Ptr &modelNormalCloud,
-        PointCloud<PPFSignature>::Ptr  &modelFeatureCloud,OfflineParamOut &pOut);
+        PointCloud<PPFSignature>::Ptr  &modelFeatureCloud,ModelParam &pOut);
 
 //===============================================构建哈希表====================================================
 
 /**
- * \brief 函数：
- *              根据给定参数，以及特征点云，构建离线哈希表并且返回其指针，注意哈希表形式是unorder map形式
- * \param [in] modelFeatureCloud 输入的模型特征点云
- * \param [in] pIn 构建哈希表需要的参数，包括角度和距离的离散间隔
- * \param [out] pOut 离线建模输出的参数，包括所构建的哈希表指针、模型最大两点间距、存放alpha_m的容器
+ * \brief buildModelHashtable函数
+ *              离线构建单个模型的全局特征哈希表并且返回其指针，注意哈希表形式是unorder map形式
+ * \param [in] modelFeatureCloud 模型的特征点云
+ * \param [in] pIn 离线建模需要的参数，包括角度和距离的离散间隔
+ * \param [out] out 离线建模输出的参数，包括所构建的哈希表指针、模型最大两点间距、存放alpha_m的容器
  * 
 */
 void buildModelHashtable(PointCloud<PPFSignature>::ConstPtr modelFeatureCloud, 
-        DiscretParamIn &pIn, OfflineParamOut &pOut);
+        ModelDiscretParams &pIn, ModelParam &pOut);
 
 #endif

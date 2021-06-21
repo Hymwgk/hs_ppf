@@ -6,9 +6,11 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/console/print.h>
 #include <pcl/registration/boost.h>
 #include <pthread.h>
+#include <boost/thread/thread.hpp>
 
 #include"compute2points_ppf.h"
 #include"pointpairToWorld.h"
@@ -18,7 +20,7 @@
 using namespace pcl;
 using namespace std;
 
-class online_matching
+class OnlineMatching
 {
 
 typedef boost::unordered_map<HashKeyStruct, uint32_t> Redundancy_check_HashMapType;
@@ -40,18 +42,28 @@ struct  LocalCoodsVotes: public std::pair <std::pair <uint16_t, uint16_t>,uint16
 
 PointCloud<PointNormal>::Ptr scene_input;//场景点云
 FeatureHashMapTypePtr feature_hash_map;
-DiscretParamIn dp;
-OfflineParamOut op;//单个模型离线建模输出的参数，但是我感觉，应该输入一个容器，一下子装所有的模型的参数
+ModelDiscretParams dp;
+ModelParam op;//单个模型离线建模输出的参数，但是我感觉，应该输入一个容器，一下子装所有的模型的参数
                                             //后来再改
 
+modelsPtr  models_input;
+onlineParamsPtr  online_params; //
 
-online_matching(const PointCloud<PointNormal>::Ptr &scene_input_,const DiscretParamIn &dp_,const OfflineParamOut &op_)
+pcl::KdTreeFLANN<PointNormal>::Ptr  sceneSearchTree;
+
+OnlineMatching(const PointCloud<PointNormal>::Ptr &scene_input_, //场景点法云指针
+        const modelsPtr &models_input_, //所有模型的（数学模型的）容器指针
+        const onlineParamsPtr &online_params_,//在线识别需要的参数的指针
+        const ModelDiscretParams &dp_,const ModelParam &op_)
 {
     scene_input=scene_input_;
+    models_input=models_input_;
+    online_params=online_params_;
     //feature_hash_map = feature_hash_map_;
     dp=dp_;
     printf("此处需要改动! \n");
     op=op_;
+    sceneSearchTree=pcl::KdTreeFLANN<PointNormal>::Ptr (new pcl::KdTreeFLANN<PointNormal>);
 
 }
 
@@ -60,9 +72,9 @@ online_matching(const PointCloud<PointNormal>::Ptr &scene_input_,const DiscretPa
  * \brief 针对某单个场景参考点进行查表和投票的过程，输出一个二维累加器
  * \param [in] scene_reference_index 参考点的索引
  * \param [in] secondPoints_indices 第二点的索引集合
- * \param [in] scene_input 输入类的场景点法云
+ * \param [in] [class_member] scene_input 输入类的场景点法云
 */
-void  SceneReferanceVote(int &scene_reference_index,vector<int> &secondPoints_indices)
+void  voteForOneSceneReferancePoint(uint32_t &scene_reference_index,vector<int> &secondPoints_indices)
 {
 
     //构建冗余检查表，每个参考点的冗余检查表都是独立的
@@ -141,11 +153,11 @@ void  SceneReferanceVote(int &scene_reference_index,vector<int> &secondPoints_in
  * \param [in] dist_step  离散ppf使用的距离离散间隔
  * \param [in] alpha_s  当前ppf对应的点对的alpha_s角度
  * \param [in] Redundancy_check 当前场景参考点(第一点)对应的冗余检查表
- * \param [in] feature_hash_map   该模型特征哈希表
+ * \param [in_class_member] op.feature_hash_map_   该模型特征哈希表
  * \param [out] indices 模型哈希表中与该ppf相匹配的模型点对索引集合 
 */
-void nearestNeighborSearch(float ppf[4], float &angle_step, float &dist_step,
-        float &alpha_s, std::vector<std::pair<uint16_t, uint16_t>> &indices,Redundancy_check_HashMapTypePtr & Redundancy_check)
+void nearestNeighborSearch(float ppf[4], float &angle_step, float &dist_step,float &alpha_s, 
+        std::vector<std::pair<uint16_t, uint16_t>> &indices,Redundancy_check_HashMapTypePtr & Redundancy_check)
 {
     //
     int d1[3]={0},
@@ -221,10 +233,10 @@ void nearestNeighborSearch(float ppf[4], float &angle_step, float &dist_step,
  * \param [in] transform_sg 当前参考点旋转到原点的变换矩阵
  * \param [in_class member] 
  * \param [in_class member] op  目标模型的离线计算参数
- * \param [out] VotesTransformForOneThread  当前场景参考点所属的子线程中，存放所有参考点计算出的"旋转+投票"的容器
+ * \param [out] AllPosesWithVotesInOneThread  当前场景参考点所属的子线程中，存放所有参考点计算出的"旋转+投票"pair的vector容器
  */
 void extractHypoPoses(vector <vector <uint16_t> > &accumulator_array, 
-        Eigen::Affine3f &transform_sg,vector<std::pair<Eigen::Affine3f,uint16_t>> &TransformVotesForOneThread )
+        Eigen::Affine3f &transform_sg,vector<std::pair<Eigen::Affine3f,uint16_t>> &AllPosesWithVotesInOneThread )
 {
     uint16_t max_votes_=0;
     //抽取阈值
@@ -266,13 +278,132 @@ void extractHypoPoses(vector <vector <uint16_t> > &accumulator_array,
             //解算出最终的变换矩阵
             transform = ModelToScene(transform_mg,transform_sg,alpha);
             //把变换矩阵和对应的票数存到所属线程的大容器中
-            TransformVotesForOneThread.emplace_back(std::pair<Eigen::Affine3f,uint16_t>(transform,it->second));
+            AllPosesWithVotesInOneThread.emplace_back(std::pair<Eigen::Affine3f,uint16_t>(transform,it->second));
         }
         else//没有超过阈值就舍弃           
             PCL_DEBUG("局部坐标%u,%u处的投票值低于阈值.\n",
                      it->first.first, it->first.second);
     }//结束了单个Sr的投票和姿态计算
 }
+
+
+void voteAndGetHypoPosesForOneTheard(const std::vector <uint32_t> &SrIndexs)
+{
+
+    //先根据
+
+
+
+
+
+    for(uint8_t i=0;i<SrIndexs.size();++i)
+    {
+        //先根据当前的场景参考点，计算包围球，获取到球体内部的场景点的索引
+
+        //
+
+
+
+
+
+
+
+
+
+    }
+
+
+
+}
+
+
+
+
+
+
+/**
+ * @brief  计算一帧场景中的某一类的目标物体(涉及到多线程)
+ *                  这个函数，涵盖了从投票到计算预测pose，再到pose聚类的操作
+ * @param [in] workerNum  指定使用的多线程数量  
+ * @param [in]  reference
+ * @param [in_class_mumber] scene_input  场景点法云的指针
+ * @param [in] model_input  装有单个目标模型各个参数的结构体
+ * @param [in_class_mumber] online_params  装有目标模型点法云指针的容器
+ * */
+void computePosesForOneClassTarget(const modelPtr &model_input )
+{
+
+    //需要计算一帧场景点云中的参考点数量
+    uint16_t sceneReferencePointsNum=
+            std::ceil(static_cast<float>(scene_input->points.size()) / online_params->sceneReferencePointSamplingStep);
+    //===计算每个子线程应该分多少个参考点=========================
+    uint8_t srNumForOneWorker,remainder =0;  //每个线程应该获得几个场景参考点
+    uint8_t realWorkerNumForVote=1;
+    //如果当前点云中采样点数大于线程数量
+    if (sceneReferencePointsNum > online_params->workerNumForVote)
+    {
+        srNumForOneWorker =
+                std::floor(sceneReferencePointsNum /online_params->workerNumForVote);//整数
+        remainder = sceneReferencePointsNum%online_params->workerNumForVote; //余数
+        realWorkerNumForVote=online_params->workerNumForVote;//使用预设的线程数
+    }
+    else//采样点数小于或者等于预设的线程数量
+    {
+        //如果参考点数小于等于线程数量，就设置每个线程分配一个就好
+        srNumForOneWorker = 1;
+        //在参考点数小于最大线程数70的时候，余数为0
+        remainder =0;
+        //更改实际的线程数量取参考点数即可（不需要预设的那么多）
+        realWorkerNumForVote = sceneReferencePointsNum;
+    }
+
+    //===为每个子线程计算和分配参考点（分配参考点的索引）==================
+	std::vector <std::vector <uint32_t> > workersReferencePointsIndex;//外层是子线程的编号，内层为该子线程要处理的参考点索引（编号）
+	workersReferencePointsIndex.resize(realWorkerNumForVote);//先把外层大小设置为子线程的数量
+	//指向每个间隔的index
+	uint32_t pointIndex=0;
+	for(uint16_t worker_id =0;worker_id<realWorkerNumForVote; ++worker_id)
+	{
+		//根据子线程的id，设置该线程到底要分配多少个参考点
+		uint8_t RealSrNumForThisWorker;
+		if(worker_id<remainder)
+			RealSrNumForThisWorker = srNumForOneWorker+1;
+		else
+			RealSrNumForThisWorker =srNumForOneWorker;
+        //为该id的子线程分配具体的参考点index
+        for(uint8_t i=0;i<RealSrNumForThisWorker;++i)
+        {
+            if(pointIndex<scene_input->points.size())
+                workersReferencePointsIndex[worker_id].emplace_back(pointIndex);
+            pointIndex+=online_params->sceneReferencePointSamplingStep*(i+1);
+        }
+	}
+
+    //===开始启动多线程投票和计算候选姿态===============
+    boost::thread t[realWorkerNumForVote];
+    //使用bind绑定函数
+    boost::function<void(int,int,std::vector <uint32_t>)> fun=
+            boost::bind(&OnlineMatching::worker,this,_1,_2);
+    //开启多线程
+    for (uint8_t worker_id = 0; worker_id < realWorkerNumForVote; ++worker_id)
+    {
+            t[worker_id] = boost::thread(fun,worker_id,workersReferencePointsIndex[worker_id]);
+    }
+
+    
+
+
+
+}//完成对一类物体的场景识别
+
+
+
+
+
+
+
+
+
 
 
 

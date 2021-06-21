@@ -1,7 +1,7 @@
 #include "offline_preparation.h"
 
 void computModelFeatureCloud(const PointCloud<PointNormal>::Ptr &modelNormalCloud,
-		PointCloud<PPFSignature>::Ptr  &modelFeatureCloud,OfflineParamOut &pOut)
+		PointCloud<PPFSignature>::Ptr  &modelFeatureCloud,ModelParam &pOut)
 {
 	pOut.transform_mgs.resize(modelNormalCloud->points.size());
     //改变一下模型特征点云中特征的数量,数量为|M|的给定点云，对应的modelFeatureCloud中的有效特征数量是|M|*|M|-M
@@ -59,9 +59,9 @@ void computModelFeatureCloud(const PointCloud<PointNormal>::Ptr &modelNormalClou
 }
 
 
-void buildModelHashtable(PointCloud<PPFSignature>::ConstPtr modelFeatureCloud, DiscretParamIn &pIn, OfflineParamOut &pOut)
+void buildModelHashtable(PointCloud<PPFSignature>::ConstPtr modelFeatureCloud, ModelDiscretParams &pIn, ModelParam &pOut)
 {
-    pOut.feature_hash_map_=boost::make_shared<FeatureHashMapType>(); //构建哈希表
+    pOut.feature_hash_map_=boost::make_shared<FeatureHashMapType>(); //构建哈希表，此时开辟了空间
     pOut.feature_hash_map_->clear();//先清空哈希表
     pOut.MaxPointpairDist=-1;//
 	pOut.model_size=modelFeatureCloud->points.size();
